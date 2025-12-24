@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 
 # --- CONFIGURAÇÕES DE CORTE (PIXELS) ---
+PASTA_TEMP = "temp_slides"
 CORTE_TOPO = 160   
 CORTE_BAIXO = 20   
 CORTE_LADOS = 10   
@@ -70,12 +71,15 @@ def solicitar_diretorio_destino():
     caminho_input = input(">> Cole o CAMINHO da pasta: ").strip()
     print("-" * 30)
 
+    # Se deixar em branco, usa a pasta atual
     if not caminho_input:
         print("Usando diretório atual do script.")
         return os.getcwd()
 
+    # Remove aspas que o Windows coloca ao usar "Copiar como caminho"
     caminho_limpo = caminho_input.replace('"', '').replace("'", "")
 
+    # Verifica se a pasta existe
     if os.path.isdir(caminho_limpo):
         return caminho_limpo
     else:
@@ -87,19 +91,14 @@ def iniciar_captura_inteligente():
     # 1. Solicita Nome
     nome_arquivo = solicitar_nome_arquivo()
     
-    # 2. Solicita Pasta Destino
-    pasta_destino_pdf = solicitar_diretorio_destino()
+    # 2. Solicita Pasta
+    pasta_destino = solicitar_diretorio_destino()
     
-    # 3. Define o Caminho Final do PDF
-    caminho_completo_pdf = os.path.join(pasta_destino_pdf, nome_arquivo)
+    # 3. Monta o caminho completo (Pasta + Nome)
+    caminho_completo_final = os.path.join(pasta_destino, nome_arquivo)
 
-    # --- NOVO: CRIA A PASTA TEMPORÁRIA COM O NOME DO ARQUIVO ---
-    # Remove a extensão .pdf para nomear a pasta
-    nome_base = os.path.splitext(nome_arquivo)[0] 
-    pasta_temp_dinamica = f"temp_{nome_base}"
-
-    if not os.path.exists(pasta_temp_dinamica):
-        os.makedirs(pasta_temp_dinamica)
+    if not os.path.exists(PASTA_TEMP):
+        os.makedirs(PASTA_TEMP)
 
     # 4. Calibragem
     region_capture = detectar_janela_ativa()
@@ -108,9 +107,7 @@ def iniciar_captura_inteligente():
         print("Falha na calibração. Tente novamente.")
         return
 
-    print(f"\n✅ Configurado!")
-    print(f"📂 Pasta de imagens: {pasta_temp_dinamica}")
-    print(f"📄 Arquivo final: {caminho_completo_pdf}")
+    print(f"\n✅ Tudo pronto! O arquivo será salvo em:\n📂 {caminho_completo_final}")
     print("\n--- COMANDOS ---")
     print(" [ENTER] -> Capturar Slide")
     print(" [ESC]   -> Finalizar e Gerar PDF")
@@ -122,13 +119,12 @@ def iniciar_captura_inteligente():
         while True:
             if keyboard.is_pressed('enter'):
                 timestamp = datetime.now().strftime("%H%M%S")
-                # Salva a imagem na pasta temporária PERSONALIZADA
-                nome_imagem = f"{pasta_temp_dinamica}/slide_{contador:03d}_{timestamp}.png"
+                nome_imagem = f"{PASTA_TEMP}/slide_{contador:03d}_{timestamp}.png"
                 
                 pyautogui.screenshot(nome_imagem, region=region_capture)
                 capturas.append(nome_imagem)
                 
-                print(f"[SUCESSO] Slide {contador} salvo em {pasta_temp_dinamica}")
+                print(f"[SUCESSO] Slide {contador} salvo.")
                 contador += 1
                 time.sleep(0.5) 
 
@@ -142,25 +138,25 @@ def iniciar_captura_inteligente():
         pass
 
     if capturas:
-        print(f"Gerando PDF em: {pasta_destino_pdf} ...")
+        print(f"Gerando PDF em: {pasta_destino} ...")
         try:
-            with open(caminho_completo_pdf, "wb") as f:
+            # Tenta salvar no caminho escolhido pelo usuário
+            with open(caminho_completo_final, "wb") as f:
                 f.write(img2pdf.convert(capturas))
-            print(f"\n✅ SUCESSO! Arquivo criado:\n{caminho_completo_pdf}")
+            print(f"\n✅ SUCESSO! Arquivo criado:\n{caminho_completo_final}")
             
-            # ATENÇÃO: Se quiser deletar a pasta temp automaticamente após terminar,
-            # descomente as linhas abaixo. Por padrão, deixei mantendo a pasta conforme seu pedido de 'backup'.
-            # import shutil
-            # shutil.rmtree(pasta_temp_dinamica)
+            # Limpeza (Opcional)
+            # for img in capturas: os.remove(img)
+            # os.rmdir(PASTA_TEMP)
             
         except Exception as e:
             print("\n❌ ERRO AO SALVAR NA PASTA DE DESTINO!")
             print(f"Erro: {e}")
             print("-" * 30)
             
-            # Backup de emergência (agora também usa o nome personalizado)
+            # Backup na pasta do script (plano B)
             try:
-                backup_name = f"backup_{nome_arquivo}"
+                backup_name = "backup_" + nome_arquivo
                 print(f"⚠️ Tentando salvar aqui mesmo como '{backup_name}'...")
                 with open(backup_name, "wb") as f:
                     f.write(img2pdf.convert(capturas))
@@ -169,11 +165,6 @@ def iniciar_captura_inteligente():
                 print("Erro crítico: Não foi possível salvar o backup.")
     else:
         print("Nenhuma imagem capturada.")
-        # Se não tirou fotos, remove a pasta vazia para não sujar o pc
-        try:
-            os.rmdir(pasta_temp_dinamica)
-        except:
-            pass
 
 if __name__ == "__main__":
     iniciar_captura_inteligente()
